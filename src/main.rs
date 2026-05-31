@@ -9,7 +9,8 @@ use iced::event::Event;
 pub use app::{Philes, update};
 pub use actions::ContextAction;
 
-pub const ITEM_WIDTH: f32 = 92.0;
+/// Fixed width of each grid cell. Do NOT change — items must not resize.
+pub const ITEM_WIDTH: f32 = 100.0;
 pub const ICON_SIZE: u16 = 96;
 
 fn main() -> iced::Result {
@@ -41,4 +42,8 @@ pub enum Message {
     // ── Context menu ──
     ContextAction(ContextAction),
     CloseContextMenu,
+    // ── Renaming ──
+    RenameInput(String),
+    RenameSubmit,
+    RenameCancel,
 }

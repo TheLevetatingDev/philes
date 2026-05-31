@@ -9,9 +9,10 @@ pub enum ContextAction {
     OpenWith,
     Copy,
     Cut,
+    Paste,
+    Rename,
     Delete,
     Send,
-    Paste,
     NewFolder,
 }
 
@@ -22,9 +23,10 @@ impl ContextAction {
             ContextAction::OpenWith  => "Open With...",
             ContextAction::Copy      => "Copy",
             ContextAction::Cut       => "Cut",
+            ContextAction::Paste     => "Paste",
+            ContextAction::Rename    => "Rename",
             ContextAction::Delete    => "Delete",
             ContextAction::Send      => "Send To...",
-            ContextAction::Paste     => "Paste",
             ContextAction::NewFolder => "New Folder",
         }
     }
@@ -35,9 +37,10 @@ impl ContextAction {
             ContextAction::OpenWith  => "...",
             ContextAction::Copy      => "[C]",
             ContextAction::Cut       => "[X]",
+            ContextAction::Paste     => "[V]",
+            ContextAction::Rename    => "[R]",
             ContextAction::Delete    => "DEL",
             ContextAction::Send      => "=>",
-            ContextAction::Paste     => "[V]",
             ContextAction::NewFolder => "+DIR",
         }
     }
@@ -49,6 +52,7 @@ impl ContextAction {
             ContextAction::OpenWith,
             ContextAction::Copy,
             ContextAction::Cut,
+            ContextAction::Rename,
             ContextAction::Delete,
             ContextAction::Send,
         ]
@@ -68,10 +72,8 @@ impl ContextAction {
 #[derive(Debug, Clone, Default)]
 pub struct ContextMenu {
     pub visible: bool,
-    /// Pixel position where the menu should appear.
     pub x: f32,
     pub y: f32,
-    /// The file-system paths the menu applies to (selected items).
     pub targets: Vec<PathBuf>,
 }
 
@@ -95,8 +97,6 @@ pub struct Clipboard {
 
 // ── Action execution ──────────────────────────────────────────────────────────
 
-/// Execute a context-menu action against the given targets.
-/// Returns an optional error message.
 pub fn execute(
     action: &ContextAction,
     targets: &[PathBuf],
@@ -256,21 +256,9 @@ pub fn execute(
             }
             None
         }
-
-        ContextAction::NewFolder => {
-            if let Some(dest_dir) = targets.first() {
-                let mut name = "Untitled Folder".to_string();
-                let mut count = 1;
-                while dest_dir.join(&name).exists() {
-                    count += 1;
-                    name = format!("Untitled Folder {}", count);
-                }
-                if let Err(e) = fs::create_dir(dest_dir.join(&name)) {
-                    return Some(format!("Failed to create folder: {e}"));
-                }
-            }
-            None
-        }
+        
+        // Handled directly in app.rs to orchestrate UI focus
+        ContextAction::Rename | ContextAction::NewFolder => None,
     }
 }
 

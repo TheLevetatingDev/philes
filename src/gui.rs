@@ -177,8 +177,7 @@ pub fn file_grid(app: &Philes) -> Element<Message> {
                 .map(|(col_idx, entry)| {
                     let idx = row_idx * cols + col_idx;
                     let is_selected = app.selected.contains(&idx);
-                    let name = truncate(&entry.name, 14);
-
+                    
                     let icon_widget: Element<Message> = if let Some(handle) = &entry.icon {
                         image(handle.clone())
                             .width(Length::Fixed(84.0))
@@ -189,7 +188,21 @@ pub fn file_grid(app: &Philes) -> Element<Message> {
                         text(text_icon).size(24).into()
                     };
 
-                    let cell = column![icon_widget, text(name).size(13)]
+                    // Swap between static text or an active text_input based on rename state
+                    let name_display: Element<Message> = if Some(idx) == app.renaming_idx {
+                        text_input("", &app.rename_input)
+                            .id("rename-input")
+                            .on_input(Message::RenameInput)
+                            .on_submit(Message::RenameSubmit)
+                            .width(Length::Fill)
+                            .size(12)
+                            .padding(4)
+                            .into()
+                    } else {
+                        text(truncate(&entry.name, 14)).size(13).into()
+                    };
+
+                    let cell = column![icon_widget, name_display]
                         .align_x(iced::Alignment::Center)
                         .spacing(8)
                         .padding(iced::Padding { top: 10.0, right: 2.0, bottom: 10.0, left: 2.0 })
@@ -232,7 +245,6 @@ pub fn file_grid(app: &Philes) -> Element<Message> {
                         })
                     };
 
-                    // mouse_area takes the container and routes left/right clicks
                     mouse_area(styled_container)
                         .on_press(Message::Click(idx))
                         .on_right_press(Message::RightClick(Some(idx)))
@@ -256,7 +268,6 @@ pub fn file_grid(app: &Philes) -> Element<Message> {
     )
     .height(Length::Fill);
 
-    // Background empty space right-click handler
     mouse_area(grid_scrollable)
         .on_right_press(Message::RightClick(None))
         .into()

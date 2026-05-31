@@ -27,6 +27,9 @@ pub struct Philes {
     pub clipboard: Clipboard,
     // Global tracking coordinates
     pub cursor_position: iced::Point,
+    // Renaming state
+    pub renaming_idx: Option<usize>,
+    pub rename_input: String,
 }
 
 impl Philes {
@@ -51,6 +54,8 @@ impl Philes {
             context_menu: ContextMenu::default(),
             clipboard: Clipboard::default(),
             cursor_position: iced::Point::ORIGIN,
+            renaming_idx: None,
+            rename_input: String::new(),
         };
 
         (app, Task::none())
@@ -106,18 +111,29 @@ pub fn update(app: &mut Philes, message: Message) -> Task<Message> {
         }
 
         Message::Event(Event::Mouse(iced::mouse::Event::ButtonPressed(button))) => {
-            // Close the menu if we left-click anywhere
             if button == iced::mouse::Button::Left {
                 if app.context_menu.visible {
                     app.context_menu = ContextMenu::close();
                 }
             }
-            // Note: We don't handle Right click globally here anymore to avoid conflicts.
-            // Right clicks are now entirely handled by `mouse_area` components in `gui.rs`.
         }
 
         Message::Click(idx) => {
             app.context_menu = ContextMenu::close();
+
+            // Auto-submit rename if the user clicks away to another file or background
+            if app.renaming_idx.is_some() {
+                if let Some(r_idx) = app.renaming_idx {
+                    let old_path = &app.entries[r_idx].path;
+                    let new_path = app.current_dir.join(&app.rename_input);
+                    if old_path != &new_path && !app.rename_input.is_empty() {
+                        let _ = std::fs::rename(old_path, &new_path);
+                    }
+                }
+                app.renaming_idx = None;
+                app.navigate(app.current_dir.clone());
+                return Task::none(); // Stop processing this click so we don't accidentally open a file while saving
+            }
 
             let now = std::time::Instant::now();
             let is_double = app
@@ -156,9 +172,21 @@ pub fn update(app: &mut Philes, message: Message) -> Task<Message> {
         }
 
         Message::RightClick(opt_idx) => {
+            // Auto-submit rename if they right click elsewhere
+            if app.renaming_idx.is_some() {
+                if let Some(r_idx) = app.renaming_idx {
+                    let old_path = &app.entries[r_idx].path;
+                    let new_path = app.current_dir.join(&app.rename_input);
+                    if old_path != &new_path && !app.rename_input.is_empty() {
+                        let _ = std::fs::rename(old_path, &new_path);
+                        app.navigate(app.current_dir.clone());
+                    }
+                }
+                app.renaming_idx = None;
+            }
+
             match opt_idx {
                 Some(idx) => {
-                    // Item right-click
                     if !app.selected.contains(&idx) {
                         app.selected.clear();
                         app.selected.insert(idx);
@@ -168,7 +196,6 @@ pub fn update(app: &mut Philes, message: Message) -> Task<Message> {
                     app.context_menu = ContextMenu::open(app.cursor_position.x, app.cursor_position.y, targets);
                 }
                 None => {
-                    // Background right-click
                     app.selected.clear();
                     app.last_clicked = None;
                     app.context_menu = ContextMenu::open(
@@ -184,20 +211,77 @@ pub fn update(app: &mut Philes, message: Message) -> Task<Message> {
             let targets = app.context_menu.targets.clone();
             app.context_menu = ContextMenu::close();
 
-            // Intercept Open action on directories so we stay inside Philes
-            if action == ContextAction::Open && targets.len() == 1 && targets[0].is_dir() {
-                app.navigate(targets[0].clone());
-            } else if let Some(err) = actions::execute(&action, &targets, &mut app.clipboard) {
-                app.error = Some(err);
-            } else {
-                if matches!(
-                    action,
-                    ContextAction::Delete | ContextAction::Cut | ContextAction::Paste | ContextAction::NewFolder
-                ) {
-                    let dir = app.current_dir.clone();
-                    app.navigate(dir);
+            match action {
+                ContextAction::Rename => {
+                    if let Some(&idx) = app.selected.iter().next() {
+                        app.renaming_idx = Some(idx);
+                        app.rename_input = app.entries[idx].name.clone();
+                        return text_input::focus("rename-input");
+                    }
+                }
+                ContextAction::NewFolder => {
+                    if let Some(dest_dir) = targets.first() {
+                        let mut name = "Untitled Folder".to_string();
+                        let mut count = 1;
+                        while dest_dir.join(&name).exists() {
+                            count += 1;
+                            name = format!("Untitled Folder {}", count);
+                        }
+                        let new_path = dest_dir.join(&name);
+                        if let Err(e) = std::fs::create_dir(&new_path) {
+                            app.error = Some(format!("Failed to create folder: {e}"));
+                        } else {
+                            app.navigate(app.current_dir.clone());
+                            // Find it in the newly loaded list and auto-focus rename
+                            if let Some(idx) = app.entries.iter().position(|e| e.path == new_path) {
+                                app.selected.clear();
+                                app.selected.insert(idx);
+                                app.renaming_idx = Some(idx);
+                                app.rename_input = name;
+                                return text_input::focus("rename-input");
+                            }
+                        }
+                    }
+                }
+                ContextAction::Open if targets.len() == 1 && targets[0].is_dir() => {
+                    app.navigate(targets[0].clone());
+                }
+                _ => {
+                    if let Some(err) = actions::execute(&action, &targets, &mut app.clipboard) {
+                        app.error = Some(err);
+                    } else {
+                        if matches!(
+                            action,
+                            ContextAction::Delete | ContextAction::Cut | ContextAction::Paste
+                        ) {
+                            app.navigate(app.current_dir.clone());
+                        }
+                    }
                 }
             }
+        }
+
+        // ── Renaming Logic ──
+        Message::RenameInput(s) => {
+            app.rename_input = s;
+        }
+
+        Message::RenameSubmit => {
+            if let Some(idx) = app.renaming_idx {
+                let old_path = &app.entries[idx].path;
+                let new_path = app.current_dir.join(&app.rename_input);
+                if old_path != &new_path && !app.rename_input.is_empty() {
+                    if let Err(e) = std::fs::rename(old_path, &new_path) {
+                        app.error = Some(format!("Failed to rename: {e}"));
+                    }
+                }
+            }
+            app.renaming_idx = None;
+            app.navigate(app.current_dir.clone());
+        }
+
+        Message::RenameCancel => {
+            app.renaming_idx = None;
         }
 
         Message::GoUp => {
