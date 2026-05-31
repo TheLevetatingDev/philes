@@ -5,16 +5,6 @@ A minimal, fast file manager for macOS built with Rust and [Iced](https://github
 ![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-## Features
-
-- **Grid view** — files and folders displayed in a clean icon grid
-- **Native macOS icons** — real system icons for every file type via `file_icon_provider`
-- **Single click to select** — click any file or folder to select it
-- **Shift+click to multi-select** — select a range of files at once
-- **Double-click to open** — double-click a folder to navigate into it, or a file to open it in its default app
-- **Up button** — navigate to the parent directory
-- **Dotfile hiding** — hidden files (starting with `.`) are not shown
-
 ## Requirements
 
 - macOS
