@@ -1,0 +1,10 @@
+[package]
+name = "philes"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = { version = "0.13", features = ["image"] }
+open = "5"
+dirs = "5"
+file_icon_provider = "1.0.0"
